@@ -37,28 +37,41 @@ abstract class AbstractProfileRequest extends AbstractRequest
     public function sendData($data)
     {
         $header = base64_encode($this->getMerchantId() . ':' . $this->getApiPasscode());
-        
+        // Don't throw exceptions for 4xx errors
+        $this->httpClient->getEventDispatcher()->addListener(
+            'request.error',
+            function ($event) {
+                if ($event['response']->isClientError()) {
+                    $event->stopPropagation();
+                }
+            }
+        );
+
         if (!empty($data)) {
-            $httpResponse = $this->httpClient->request(
+            $httpRequest = $this->httpClient->createRequest(
                 $this->getHttpMethod(),
                 $this->getEndpoint(),
-                [
-                    'Content-Type' => 'application/json',
-                    'Authorization' => 'Passcode ' . $header,
-                ],
+                null,
                 json_encode($data)
             );
         } else {
-            $httpResponse = $this->httpClient->request(
+            $httpRequest = $this->httpClient->createRequest(
                 $this->getHttpMethod(),
-                $this->getEndpoint(),
-                [
-                    'Content-Type' => 'application/json',
-                    'Authorization' => 'Passcode ' . $header,
-                ]
+                $this->getEndpoint()
             );
         }
 
-        return $this->response = new ProfileResponse($this, $httpResponse->getBody()->getContents());
+        $httpResponse = $httpRequest
+            ->setHeader(
+                'Content-Type',
+                'application/json'
+            )
+            ->setHeader(
+                'Authorization',
+                'Passcode ' . $header
+            )
+            ->send();
+
+        return $this->response = new ProfileResponse($this, $httpResponse->json());
     }
 }
